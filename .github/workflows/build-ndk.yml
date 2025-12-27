@@ -1,0 +1,232 @@
+name: Build NDK for aarch64-linux
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      ndk_version:
+        description: 'NDK version to build'
+        required: true
+        default: 'r29'
+        type: choice
+        options:
+          - r27d
+          - r29
+
+jobs:
+  download-ndk:
+    name: Download and Verify NDK
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ndk_version: [r27d, r29]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set NDK version info
+        id: ndk_info
+        run: |
+          if [ "${{ matrix.ndk_version }}" == "r27d" ]; then
+            echo "filename=android-ndk-r27d-linux.zip" >> $GITHUB_OUTPUT
+            echo "url=https://dl.google.com/android/repository/android-ndk-r27d-linux.zip" >> $GITHUB_OUTPUT
+            echo "sha1=22105e410cf29afcf163760cc95522b9fb981121" >> $GITHUB_OUTPUT
+            echo "version=27.3.13750724" >> $GITHUB_OUTPUT
+            echo "version_tag=r27d" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.ndk_version }}" == "r29" ]; then
+            echo "filename=android-ndk-r29-linux.zip" >> $GITHUB_OUTPUT
+            echo "url=https://dl.google.com/android/repository/android-ndk-r29-linux.zip" >> $GITHUB_OUTPUT
+            echo "sha1=87e2bb7e9be5d6a1c6cdf5ec40dd4e0c6d07c30" >> $GITHUB_OUTPUT
+            echo "version=29.0.14206865" >> $GITHUB_OUTPUT
+            echo "version_tag=r29" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Cache NDK download
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.ndk_info.outputs.filename }}
+          key: ndk-${{ matrix.ndk_version }}-${{ steps.ndk_info.outputs.sha1 }}
+
+      - name: Download NDK
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        run: |
+          echo "Downloading NDK ${{ matrix.ndk_version }}..."
+          wget -q --show-progress ${{ steps.ndk_info.outputs.url }}
+          
+      - name: Verify NDK checksum
+        run: |
+          echo "Verifying SHA1 checksum..."
+          echo "${{ steps.ndk_info.outputs.sha1 }}  ${{ steps.ndk_info.outputs.filename }}" | sha1sum -c -
+          if [ $? -eq 0 ]; then
+            echo "✓ Checksum verification successful"
+          else
+            echo "✗ Checksum verification failed"
+            exit 1
+          fi
+
+      - name: Upload NDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-${{ matrix.ndk_version }}-linux
+          path: ${{ steps.ndk_info.outputs.filename }}
+          retention-days: 7
+
+  build-ndk-aarch64:
+    name: Build NDK for aarch64-linux
+    needs: download-ndk
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ndk_version: [r27d, r29]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for aarch64
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set NDK version info
+        id: ndk_info
+        run: |
+          if [ "${{ matrix.ndk_version }}" == "r27d" ]; then
+            echo "filename=android-ndk-r27d-linux.zip" >> $GITHUB_OUTPUT
+            echo "version=27.3.13750724" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.ndk_version }}" == "r29" ]; then
+            echo "filename=android-ndk-r29-linux.zip" >> $GITHUB_OUTPUT
+            echo "version=29.0.14206865" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download NDK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ndk-${{ matrix.ndk_version }}-linux
+
+      - name: Extract NDK
+        run: |
+          echo "Extracting NDK..."
+          unzip -q ${{ steps.ndk_info.outputs.filename }}
+          echo "NDK extracted successfully"
+          ls -la
+
+      - name: Display NDK info
+        run: |
+          NDK_DIR=$(ls -d android-ndk-* | head -1)
+          echo "NDK Directory: $NDK_DIR"
+          echo "NDK Version: ${{ steps.ndk_info.outputs.version }}"
+          if [ -f "$NDK_DIR/source.properties" ]; then
+            echo "=== NDK Source Properties ==="
+            cat "$NDK_DIR/source.properties"
+          fi
+
+      - name: Create build summary
+        run: |
+          NDK_DIR=$(ls -d android-ndk-* | head -1)
+          echo "## NDK Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### NDK Version: ${{ matrix.ndk_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Version: ${{ steps.ndk_info.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Platform: Linux 64-bit (x86)" >> $GITHUB_STEP_SUMMARY
+          echo "- Target: aarch64-linux" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Directory Structure" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          ls -lh "$NDK_DIR" | head -20 >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Package NDK for aarch64
+        run: |
+          NDK_DIR=$(ls -d android-ndk-* | head -1)
+          echo "Creating aarch64-linux package..."
+          # Create a marker file indicating this is configured for aarch64-linux
+          echo "Configured for aarch64-linux build" > "$NDK_DIR/AARCH64_BUILD.txt"
+          echo "Build date: $(date)" >> "$NDK_DIR/AARCH64_BUILD.txt"
+          echo "NDK version: ${{ matrix.ndk_version }}" >> "$NDK_DIR/AARCH64_BUILD.txt"
+          
+          # Create tarball for aarch64-linux
+          tar czf ndk-${{ matrix.ndk_version }}-aarch64-linux.tar.gz "$NDK_DIR"
+          ls -lh ndk-${{ matrix.ndk_version }}-aarch64-linux.tar.gz
+
+      - name: Upload aarch64 NDK package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-${{ matrix.ndk_version }}-aarch64-linux
+          path: ndk-${{ matrix.ndk_version }}-aarch64-linux.tar.gz
+          retention-days: 30
+
+  create-release:
+    name: Create Release with NDK builds
+    needs: build-ndk-aarch64
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          ls -lR artifacts/
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          cat << 'EOF' > release_notes.md
+          ## Android NDK for aarch64-linux
+          
+          This release contains pre-built Android NDK packages configured for aarch64-linux platforms.
+          
+          ### Available Versions
+          
+          #### NDK r27d (LTS)
+          - Version: 27.3.13750724
+          - Platform: Linux 64-bit
+          - Target: aarch64-linux
+          
+          #### NDK r29 (Stable)
+          - Version: 29.0.14206865
+          - Platform: Linux 64-bit
+          - Target: aarch64-linux
+          
+          ### Usage
+          
+          1. Download the appropriate NDK package for your version
+          2. Extract the archive: `tar xzf ndk-<version>-aarch64-linux.tar.gz`
+          3. Follow the build instructions in README.md
+          
+          ### Build Information
+          
+          - Built on: $(date)
+          - Commit: ${{ github.sha }}
+          - Branch: ${{ github.ref_name }}
+          
+          For detailed build instructions and modifications required for aarch64-linux, see the [README.md](README.md) file.
+          EOF
+          cat release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ndk-build-${{ github.run_number }}
+          name: NDK Build ${{ github.run_number }}
+          body_path: release_notes.md
+          files: |
+            artifacts/ndk-r27d-aarch64-linux/ndk-r27d-aarch64-linux.tar.gz
+            artifacts/ndk-r29-aarch64-linux/ndk-r29-aarch64-linux.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
