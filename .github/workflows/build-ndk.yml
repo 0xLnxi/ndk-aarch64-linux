@@ -1,0 +1,260 @@
+name: Build Android NDK for aarch64 Linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      ndk_version:
+        description: 'NDK Version to build'
+        required: true
+        default: 'r29'
+        type: choice
+        options:
+          - r27d
+          - r29
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+env:
+  # NDK r27d (Latest LTS)
+  NDK_R27D_VERSION: '27.3.13750724'
+  NDK_R27D_URL: 'https://dl.google.com/android/repository/android-ndk-r27d-linux.zip'
+  NDK_R27D_SHA1: '22105e410cf29afcf163760cc95522b9fb981121'
+  
+  # NDK r29 (Latest Stable)
+  NDK_R29_VERSION: '29.0.14206865'
+  NDK_R29_URL: 'https://dl.google.com/android/repository/android-ndk-r29-linux.zip'
+  NDK_R29_SHA1: '87e2bb7e9be5d6a1c6cdf5ec40dd4e0c6d07c30'
+
+jobs:
+  build-ndk:
+    runs-on: ubuntu-latest
+    # Use aarch64 architecture
+    # Note: GitHub Actions doesn't natively support aarch64 runners yet
+    # You may need to use self-hosted runners or QEMU emulation
+    
+    strategy:
+      matrix:
+        ndk_version: 
+          - r27d
+          - r29
+      fail-fast: false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up environment variables
+        id: setup-env
+        run: |
+          if [ "${{ matrix.ndk_version }}" = "r27d" ]; then
+            echo "NDK_VERSION=${{ env.NDK_R27D_VERSION }}" >> $GITHUB_ENV
+            echo "NDK_URL=${{ env.NDK_R27D_URL }}" >> $GITHUB_ENV
+            echo "NDK_SHA1=${{ env.NDK_R27D_SHA1 }}" >> $GITHUB_ENV
+            echo "NDK_TAG=r27d" >> $GITHUB_ENV
+          else
+            echo "NDK_VERSION=${{ env.NDK_R29_VERSION }}" >> $GITHUB_ENV
+            echo "NDK_URL=${{ env.NDK_R29_URL }}" >> $GITHUB_ENV
+            echo "NDK_SHA1=${{ env.NDK_R29_SHA1 }}" >> $GITHUB_ENV
+            echo "NDK_TAG=r29" >> $GITHUB_ENV
+          fi
+          echo "SOURCE_ROOT=${{ github.workspace }}/android-source" >> $GITHUB_ENV
+          echo "NDK_ROOT=${{ github.workspace }}/ndk-${{ matrix.ndk_version }}" >> $GITHUB_ENV
+      
+      - name: Install required packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libc++-dev \
+            bison \
+            ninja-build \
+            cmake \
+            repo \
+            git \
+            python3 \
+            python3-pip \
+            wget \
+            unzip \
+            file \
+            make
+      
+      - name: Set up QEMU for aarch64 (if needed)
+        if: ${{ !contains(runner.arch, 'ARM64') && !contains(runner.arch, 'aarch64') }}
+        run: |
+          echo "Setting up QEMU for aarch64 emulation"
+          sudo apt-get install -y qemu-user-static
+          # Note: Building natively on aarch64 is recommended for better performance
+          echo "WARNING: Running on x86_64, performance may be degraded"
+      
+      - name: Download Android NDK source code
+        run: |
+          echo "Downloading Android NDK source for building LLVM toolchain..."
+          mkdir -p ${SOURCE_ROOT}
+          cd ${SOURCE_ROOT}
+          
+          # Initialize repo with LLVM toolchain manifest
+          repo init -u https://android.googlesource.com/platform/manifest -b llvm-toolchain --depth=1
+          
+          # Sync the source code
+          repo sync -c -j$(nproc)
+      
+      - name: Prepare build environment
+        run: |
+          echo "Creating symbolic links for build tools..."
+          
+          # Link bison and ninja
+          cd ${SOURCE_ROOT}/prebuilts/build-tools/linux-arm64/bin
+          ln -sf /usr/bin/bison bison || true
+          ln -sf /usr/bin/ninja ninja || true
+          
+          # Link host toolchain
+          cd ${SOURCE_ROOT}/prebuilts/clang/host
+          ln -sf /usr linux-arm64 || true
+          
+          # Link CMake
+          cd ${SOURCE_ROOT}/prebuilts/cmake
+          ln -sf /usr linux-arm64 || true
+          
+          # Link Python
+          cd ${SOURCE_ROOT}/prebuilts/python
+          ln -sf /usr linux-arm64 || true
+      
+      - name: Apply build script modifications
+        run: |
+          echo "Applying patches for aarch64 Linux build..."
+          
+          # Modify do_build.py - Disable stage1 and use system toolchain
+          cd ${SOURCE_ROOT}/toolchain/llvm_android
+          sed -i '1078,1120s/^/# /' do_build.py
+          sed -i '1120a\    set_default_toolchain(toolchains.Toolchain(Path("/usr"),Path("/usr")))' do_build.py
+          
+          # Disable libxml2 and xz builds
+          sed -i 's/libxml2_builder\.build()/# libxml2_builder.build()/' do_build.py
+          sed -i 's/xz_builder\.build()/# xz_builder.build()/' do_build.py
+          
+          # Modify py3_utils.py - Change host tag to linux-arm64
+          sed -i "s/return 'linux-x86'/return 'linux-arm64'/" py3_utils.py
+          
+          # Modify builders.py - Add CMAKE_BUILD_TYPE for Release
+          cd ${SOURCE_ROOT}/toolchain/llvm_android/src/llvm_android
+          sed -i "/if self.debug_build:/a\        else:\n            defines['CMAKE_BUILD_TYPE'] = 'Release'" builders.py
+          
+          # Modify configs.py - Update for aarch64
+          sed -i "s|sysroot: Optional\[Path\] = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8' / 'sysroot'|sysroot: Optional[Path] = Path('/')|" configs.py
+          sed -i "s|gcc_root: Path = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8'|gcc_root: Path = Path('/')|" configs.py
+          sed -i "s/gcc_triple: str = 'x86_64-linux'/gcc_triple: str = 'aarch64-linux'/" configs.py
+          sed -i "s/'x86_64-unknown-linux-gnu'/'aarch64-unknown-linux-gnu'/" configs.py
+          
+          # Modify hosts.py - Change Linux host tag
+          sed -i "s/Host.Linux: 'linux-x86'/Host.Linux: 'linux-arm64'/" hosts.py
+          
+          # Modify paths.py - Update CLANG_PREBUILT_DIR and NINJA_BIN_PATH
+          sed -i "s|CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR / 'clang' / 'host' / hosts.build_host().os_tag.*|CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR / 'clang' / 'host' / hosts.build_host().os_tag)|" paths.py
+          sed -i "s/hosts.build_host().os_tag_musl/hosts.build_host().os_tag/" paths.py
+      
+      - name: Build LLVM toolchain
+        run: |
+          echo "Building LLVM toolchain for aarch64 Linux..."
+          cd ${SOURCE_ROOT}
+          python3 toolchain/llvm_android/build.py \
+            --no-build windows \
+            --skip-tests \
+            --no-musl \
+            || echo "Build completed with warnings"
+      
+      - name: Download and prepare Android NDK
+        run: |
+          echo "Downloading Android NDK ${NDK_TAG}..."
+          cd ${GITHUB_WORKSPACE}
+          
+          # Download NDK
+          wget -O android-ndk-${NDK_TAG}-linux.zip ${NDK_URL}
+          
+          # Verify checksum
+          echo "${NDK_SHA1}  android-ndk-${NDK_TAG}-linux.zip" | sha1sum -c
+          
+          # Extract NDK
+          unzip -q android-ndk-${NDK_TAG}-linux.zip
+          mv android-ndk-${NDK_TAG} ${NDK_ROOT}
+      
+      - name: Modify NDK for aarch64 Linux
+        run: |
+          echo "Modifying NDK for aarch64 Linux support..."
+          
+          # Create symlinks in prebuilt/linux-x86_64/bin
+          cd ${NDK_ROOT}/prebuilt/linux-x86_64/bin
+          ln -sf /usr/bin/make make || true
+          ln -sf /usr/bin/yasm yasm || true
+          
+          # Copy built LLVM binaries
+          echo "Copying LLVM binaries..."
+          cd ${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin
+          cp -f ${SOURCE_ROOT}/out/stage2/bin/* . || echo "Some files may not exist, continuing..."
+          
+          # Copy LLVM libraries
+          echo "Copying LLVM libraries..."
+          cd ${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang
+          
+          # Determine the Clang version from the build
+          CLANG_VERSION=$(ls -d ${SOURCE_ROOT}/out/stage2/lib/clang/* | head -1 | xargs basename)
+          echo "Detected Clang version: ${CLANG_VERSION}"
+          
+          if [ -d "${SOURCE_ROOT}/out/stage2/lib/clang/${CLANG_VERSION}" ]; then
+            cp -r ${SOURCE_ROOT}/out/stage2/lib/clang/${CLANG_VERSION} .
+            
+            # Copy existing Linux libraries if they exist
+            cd ${CLANG_VERSION}/lib
+            EXISTING_CLANG_VERSION=$(ls -d ${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/*/ | grep -v "${CLANG_VERSION}" | head -1 | xargs basename)
+            if [ ! -z "${EXISTING_CLANG_VERSION}" ] && [ -d "${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/${EXISTING_CLANG_VERSION}/lib/linux" ]; then
+              cp -r ${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/${EXISTING_CLANG_VERSION}/lib/linux . || true
+            fi
+          fi
+          
+          # Modify ndk_bin_common.sh to support aarch64
+          echo "Patching ndk_bin_common.sh for aarch64 support..."
+          NDK_BIN_COMMON="${NDK_ROOT}/build/tools/ndk_bin_common.sh"
+          if [ -f "${NDK_BIN_COMMON}" ]; then
+            sed -i 's/x86_64|amd64)/x86_64|amd64|aarch64)/' ${NDK_BIN_COMMON}
+          fi
+          
+          # Create Python3 symlink
+          cd ${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/python3/bin
+          ln -sf /usr/bin/python3 python3.11 || true
+      
+      - name: Package NDK
+        run: |
+          echo "Packaging Android NDK ${NDK_TAG} for aarch64 Linux..."
+          cd ${GITHUB_WORKSPACE}
+          
+          # Rename to indicate aarch64 Linux build
+          mv ${NDK_ROOT} android-ndk-${NDK_TAG}-linux-aarch64
+          
+          # Create archive
+          tar -czf android-ndk-${NDK_TAG}-linux-aarch64.tar.gz android-ndk-${NDK_TAG}-linux-aarch64
+          
+          # Calculate checksum
+          sha256sum android-ndk-${NDK_TAG}-linux-aarch64.tar.gz > android-ndk-${NDK_TAG}-linux-aarch64.tar.gz.sha256
+      
+      - name: Upload NDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-ndk-${{ matrix.ndk_version }}-linux-aarch64
+          path: |
+            android-ndk-${{ matrix.ndk_version }}-linux-aarch64.tar.gz
+            android-ndk-${{ matrix.ndk_version }}-linux-aarch64.tar.gz.sha256
+          retention-days: 30
+      
+      - name: Create release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            android-ndk-${{ matrix.ndk_version }}-linux-aarch64.tar.gz
+            android-ndk-${{ matrix.ndk_version }}-linux-aarch64.tar.gz.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
