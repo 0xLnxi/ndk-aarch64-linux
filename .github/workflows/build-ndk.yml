@@ -66,12 +66,7 @@ jobs:
           EXPECTED="${{ steps.ndk_info.outputs.sha1 }}"
           FILE="${{ steps.ndk_info.outputs.filename }}"
           echo "$EXPECTED  $FILE" | sha1sum -c -
-          if [ $? -eq 0 ]; then
-            echo "✓ Checksum verification successful"
-          else
-            echo "✗ Checksum verification failed"
-            exit 1
-          fi
+          echo "✓ Checksum verification successful"
 
       - name: Upload NDK artifact
         uses: actions/upload-artifact@v4
