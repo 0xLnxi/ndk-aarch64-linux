@@ -20,6 +20,8 @@ jobs:
   download-ndk:
     name: Download and Verify NDK
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         ndk_version: [r27d, r29]
@@ -79,6 +81,8 @@ jobs:
     name: Build NDK for aarch64-linux
     needs: download-ndk
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         ndk_version: [r27d, r29]
@@ -166,6 +170,8 @@ jobs:
     name: Create Release with NDK builds
     needs: build-ndk-aarch64
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     if: >
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
