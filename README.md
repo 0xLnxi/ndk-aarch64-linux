@@ -1,3 +1,36 @@
+# Android NDK for aarch64 Linux
+
+This repository provides instructions and automation for building Android NDK on aarch64 (ARM64) Linux systems.
+
+## Supported NDK Versions
+
+- **r27d** - Latest LTS version (27.3.13750724)
+- **r29** - Latest stable version (29.0.14206865)
+
+## Automated Build with GitHub Actions
+
+The repository includes a GitHub Actions workflow that automates the entire build process.
+
+### Using the Workflow
+
+1. **Manual Trigger**: Go to the "Actions" tab in GitHub, select "Build Android NDK for aarch64 Linux" workflow, and click "Run workflow". You can choose which NDK version to build (r27d or r29).
+
+2. **Automatic Trigger**: The workflow runs automatically on pushes and pull requests to the main/master branch.
+
+3. **Download Artifacts**: After the workflow completes, download the built NDK from the "Artifacts" section of the workflow run.
+
+### Workflow Features
+
+- Builds both r27d (LTS) and r29 (stable) NDK versions
+- Automatically downloads Android LLVM toolchain source
+- Applies all necessary patches for aarch64 Linux
+- Compiles LLVM toolchain
+- Packages the NDK for aarch64 Linux
+- Uploads artifacts with SHA256 checksums
+- Creates releases when tags are pushed
+
+## Manual Build Instructions
+
 # How to Build on Aarch64 Linux
 
 ## Clone Source Code
