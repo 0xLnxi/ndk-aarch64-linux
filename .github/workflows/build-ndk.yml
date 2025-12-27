@@ -38,6 +38,11 @@ jobs:
     # On x86_64 runners, QEMU emulation will be used which may be slower
     runs-on: ubuntu-latest
     
+    # Limit permissions for security
+    permissions:
+      contents: write  # Needed for creating releases
+      actions: read    # Needed for workflow actions
+      
     strategy:
       matrix:
         ndk_version: ${{ github.event.inputs.ndk_version && fromJSON(format('["{0}"]', github.event.inputs.ndk_version)) || fromJSON('["r27d", "r29"]') }}
