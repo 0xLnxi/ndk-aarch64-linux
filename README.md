@@ -1,5 +1,36 @@
 # How to Build on Aarch64 Linux
 
+[![Build NDK for aarch64-linux](https://github.com/0xLnxi/ndk-aarch64-linux/actions/workflows/build-ndk.yml/badge.svg)](https://github.com/0xLnxi/ndk-aarch64-linux/actions/workflows/build-ndk.yml)
+
+## Automated Builds with GitHub Actions
+
+This repository includes a GitHub Actions workflow that automatically downloads and packages the Android NDK for aarch64-linux platforms.
+
+### Available NDK Versions
+
+The workflow supports two NDK versions:
+
+#### NDK r27d (LTS)
+- **Version**: 27.3.13750724
+- **Download**: android-ndk-r27d-linux.zip (663,956,036 bytes)
+- **SHA1**: 22105e410cf29afcf163760cc95522b9fb981121
+
+#### NDK r29 (Stable)
+- **Version**: 29.0.14206865
+- **Download**: android-ndk-r29-linux.zip (783,549,481 bytes)
+- **SHA1**: 87e2bb7e9be5d6a1c6cdf5ec40dd4e0c6d07c300
+
+### Using Pre-built NDK Packages
+
+You can download pre-built NDK packages from the [GitHub Actions artifacts](https://github.com/0xLnxi/ndk-aarch64-linux/actions) or [Releases](https://github.com/0xLnxi/ndk-aarch64-linux/releases) page.
+
+To use a pre-built package:
+1. Download the `ndk-r27d-aarch64-linux.tar.gz` or `ndk-r29-aarch64-linux.tar.gz` file
+2. Extract it: `tar xzf ndk-<version>-aarch64-linux.tar.gz`
+3. Follow the manual build instructions below to complete the setup
+
+## Manual Build Instructions
+
 ## Clone Source Code
 
 ```shell
