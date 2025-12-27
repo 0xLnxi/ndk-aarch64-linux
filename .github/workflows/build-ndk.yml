@@ -134,8 +134,15 @@ jobs:
           
           # Modify do_build.py - Disable stage1 and use system toolchain
           cd ${SOURCE_ROOT}/toolchain/llvm_android
-          sed -i '1078,1120s/^/# /' do_build.py
-          sed -i '1120a\    set_default_toolchain(toolchains.Toolchain(Path("/usr"),Path("/usr")))' do_build.py
+          
+          # Comment out stage1 builder section (more robust pattern matching)
+          # This searches for the stage1 builder block and comments it out
+          sed -i '/if not args.bootstrap_use_prebuilt and not args.bootstrap_use:/,/set_default_toolchain(stage1.installed_toolchain)/s/^/# /' do_build.py
+          sed -i '/if args.bootstrap_use:/,/set_default_toolchain(toolchains.Toolchain/s/^/# /' do_build.py
+          sed -i '/if args.bootstrap_build_only:/,/return$/s/^/# /' do_build.py
+          
+          # Add system toolchain as default after the commented sections
+          sed -i '/libzstd_builder\.build()/a\    set_default_toolchain(toolchains.Toolchain(Path("/usr"),Path("/usr")))' do_build.py
           
           # Disable libxml2 and xz builds
           sed -i 's/libxml2_builder\.build()/# libxml2_builder.build()/' do_build.py
@@ -180,6 +187,7 @@ jobs:
           wget -O android-ndk-${NDK_TAG}-linux.zip ${NDK_URL}
           
           # Verify checksum (skip if hash is incomplete)
+          # SHA1 hashes are 40 hexadecimal characters long
           if [ ${#NDK_SHA1} -eq 40 ]; then
             echo "${NDK_SHA1}  android-ndk-${NDK_TAG}-linux.zip" | sha1sum -c
           else
@@ -209,19 +217,22 @@ jobs:
           echo "Copying LLVM libraries..."
           cd ${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang
           
-          # Determine the Clang version from the build
+          # Determine the Clang version from the build using find for better reliability
           if [ -d "${SOURCE_ROOT}/out/stage2/lib/clang" ]; then
-            CLANG_VERSION=$(ls -d ${SOURCE_ROOT}/out/stage2/lib/clang/*/ 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+            # Find the first directory in clang directory (this is the version number)
+            CLANG_VERSION=$(find ${SOURCE_ROOT}/out/stage2/lib/clang -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | head -1)
             
             if [ ! -z "${CLANG_VERSION}" ]; then
               echo "Detected Clang version: ${CLANG_VERSION}"
               cp -r ${SOURCE_ROOT}/out/stage2/lib/clang/${CLANG_VERSION} . || echo "Warning: Could not copy Clang ${CLANG_VERSION} libraries"
               
-              # Copy existing Linux libraries if they exist
+              # Copy existing Linux libraries if they exist from the original NDK
               if [ -d "${CLANG_VERSION}/lib" ]; then
                 cd ${CLANG_VERSION}/lib
-                EXISTING_CLANG_VERSION=$(ls -d ${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/*/ 2>/dev/null | grep -v "${CLANG_VERSION}" | head -1 | xargs basename 2>/dev/null || echo "")
+                # Find an existing Clang version directory in the NDK (excluding the one we just copied)
+                EXISTING_CLANG_VERSION=$(find ${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | grep -v "^${CLANG_VERSION}$" | head -1)
                 if [ ! -z "${EXISTING_CLANG_VERSION}" ] && [ -d "${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/${EXISTING_CLANG_VERSION}/lib/linux" ]; then
+                  echo "Copying Linux libraries from existing NDK Clang version ${EXISTING_CLANG_VERSION}"
                   cp -r ${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/${EXISTING_CLANG_VERSION}/lib/linux . || true
                 fi
                 cd ${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang
