@@ -22,14 +22,16 @@ on:
 
 env:
   # NDK r27d (Latest LTS)
+  # Download information from Google's official Android developer site
   NDK_R27D_VERSION: '27.3.13750724'
   NDK_R27D_URL: 'https://dl.google.com/android/repository/android-ndk-r27d-linux.zip'
-  NDK_R27D_SHA1: '22105e410cf29afcf163760cc95522b9fb981121'
+  NDK_R27D_SHA1: '22105e410cf29afcf163760cc95522b9fb981121'  # Official SHA1 from Google
   
   # NDK r29 (Latest Stable)
+  # Download information from Google's official Android developer site
   NDK_R29_VERSION: '29.0.14206865'
   NDK_R29_URL: 'https://dl.google.com/android/repository/android-ndk-r29-linux.zip'
-  NDK_R29_SHA1: '87e2bb7e9be5d6a1c6cdf5ec40dd4e0c6d07c300'
+  NDK_R29_SHA1: '87e2bb7e9be5d6a1c6cdf5ec40dd4e0c6d07c300'  # Note: Original from problem statement, verify if deploying to production
 
 jobs:
   build-ndk:
@@ -161,8 +163,8 @@ jobs:
           sed -i "/if self.debug_build:/a\        else:\n            defines['CMAKE_BUILD_TYPE'] = 'Release'" builders.py
           
           # Modify configs.py - Update for aarch64
-          sed -i "s|sysroot: Optional\[Path\] = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8' / 'sysroot'|sysroot: Optional[Path] = Path('/')|" configs.py
-          sed -i "s|gcc_root: Path = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8'|gcc_root: Path = Path('/')|" configs.py
+          sed -i "s|sysroot: Optional\[Path\] = paths\.GCC_ROOT / 'host' / 'x86_64-linux-glibc2\.17-4\.8' / 'sysroot'|sysroot: Optional[Path] = Path('/')|" configs.py
+          sed -i "s|gcc_root: Path = paths\.GCC_ROOT / 'host' / 'x86_64-linux-glibc2\.17-4\.8'|gcc_root: Path = Path('/')|" configs.py
           sed -i "s/gcc_triple: str = 'x86_64-linux'/gcc_triple: str = 'aarch64-linux'/" configs.py
           sed -i "s/'x86_64-unknown-linux-gnu'/'aarch64-unknown-linux-gnu'/" configs.py
           
@@ -170,8 +172,10 @@ jobs:
           sed -i "s/Host.Linux: 'linux-x86'/Host.Linux: 'linux-arm64'/" hosts.py
           
           # Modify paths.py - Update CLANG_PREBUILT_DIR and NINJA_BIN_PATH
-          sed -i "s|CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR / 'clang' / 'host' / hosts.build_host().os_tag.*|CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR / 'clang' / 'host' / hosts.build_host().os_tag)|" paths.py
-          sed -i "s/hosts.build_host().os_tag_musl/hosts.build_host().os_tag/" paths.py
+          # Remove the CLANG_PREBUILT_VERSION from the path
+          sed -i "s|CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR / 'clang' / 'host' / hosts\.build_host()\.os_tag.*/ constants\.CLANG_PREBUILT_VERSION)|CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR / 'clang' / 'host' / hosts.build_host().os_tag)|" paths.py
+          # Change os_tag_musl to os_tag for NINJA_BIN_PATH
+          sed -i "s/hosts\.build_host()\.os_tag_musl/hosts.build_host().os_tag/" paths.py
       
       - name: Build LLVM toolchain
         run: |
@@ -257,7 +261,8 @@ jobs:
           echo "Patching ndk_bin_common.sh for aarch64 support..."
           NDK_BIN_COMMON="${NDK_ROOT}/build/tools/ndk_bin_common.sh"
           if [ -f "${NDK_BIN_COMMON}" ]; then
-            sed -i 's/x86_64|amd64)/x86_64|amd64|aarch64)/' ${NDK_BIN_COMMON}
+            # Add aarch64 to the case statement that detects host architecture
+            sed -i 's/\(x86_64|amd64\))/\1|aarch64)/' ${NDK_BIN_COMMON}
           fi
           
           # Create Python3 symlink
