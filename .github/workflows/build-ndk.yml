@@ -33,16 +33,15 @@ jobs:
       - name: Set NDK version info
         id: ndk_info
         run: |
+          NDK_URL="https://dl.google.com/android/repository"
           if [ "${{ matrix.ndk_version }}" == "r27d" ]; then
             echo "filename=android-ndk-r27d-linux.zip" >> $GITHUB_OUTPUT
-            NDK_URL="https://dl.google.com/android/repository"
             echo "url=${NDK_URL}/android-ndk-r27d-linux.zip" >> $GITHUB_OUTPUT
             echo "sha1=22105e410cf29afcf163760cc95522b9fb981121" >> $GITHUB_OUTPUT
             echo "version=27.3.13750724" >> $GITHUB_OUTPUT
             echo "version_tag=r27d" >> $GITHUB_OUTPUT
           elif [ "${{ matrix.ndk_version }}" == "r29" ]; then
             echo "filename=android-ndk-r29-linux.zip" >> $GITHUB_OUTPUT
-            NDK_URL="https://dl.google.com/android/repository"
             echo "url=${NDK_URL}/android-ndk-r29-linux.zip" >> $GITHUB_OUTPUT
             echo "sha1=87e2bb7e9be5d6a1c6cdf5ec40dd4e0c6d07c300" >> $GITHUB_OUTPUT
             echo "version=29.0.14206865" >> $GITHUB_OUTPUT
