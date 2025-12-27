@@ -42,7 +42,7 @@ jobs:
             echo "filename=android-ndk-r29-linux.zip" >> $GITHUB_OUTPUT
             NDK_URL="https://dl.google.com/android/repository"
             echo "url=${NDK_URL}/android-ndk-r29-linux.zip" >> $GITHUB_OUTPUT
-            echo "sha1=87e2bb7e9be5d6a1c6cdf5ec40dd4e0c6d07c30" >> $GITHUB_OUTPUT
+            echo "sha1=87e2bb7e9be5d6a1c6cdf5ec40dd4e0c6d07c300" >> $GITHUB_OUTPUT
             echo "version=29.0.14206865" >> $GITHUB_OUTPUT
             echo "version_tag=r29" >> $GITHUB_OUTPUT
           fi
@@ -174,7 +174,6 @@ jobs:
     if: >
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-
 
     steps:
       - name: Checkout repository

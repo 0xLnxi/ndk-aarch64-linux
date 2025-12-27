@@ -18,7 +18,7 @@ The workflow supports two NDK versions:
 #### NDK r29 (Stable)
 - **Version**: 29.0.14206865
 - **Download**: android-ndk-r29-linux.zip (783,549,481 bytes)
-- **SHA1**: 87e2bb7e9be5d6a1c6cdf5ec40dd4e0c6d07c30
+- **SHA1**: 87e2bb7e9be5d6a1c6cdf5ec40dd4e0c6d07c300
 
 ### Using Pre-built NDK Packages
 
