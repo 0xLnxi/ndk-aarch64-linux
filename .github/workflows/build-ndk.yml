@@ -188,10 +188,14 @@ jobs:
           
           # Verify checksum (skip if hash is incomplete)
           # SHA1 hashes are 40 hexadecimal characters long
+          echo "Verifying download integrity..."
+          echo "Expected SHA1 length: 40, actual length: ${#NDK_SHA1}"
+          echo "SHA1 value: ${NDK_SHA1}"
+          
           if [ ${#NDK_SHA1} -eq 40 ]; then
             echo "${NDK_SHA1}  android-ndk-${NDK_TAG}-linux.zip" | sha1sum -c
           else
-            echo "Warning: SHA1 checksum is incomplete, skipping verification"
+            echo "Warning: SHA1 checksum is incomplete (${#NDK_SHA1} chars), skipping verification"
             echo "Downloaded file size: $(stat -c%s android-ndk-${NDK_TAG}-linux.zip) bytes"
           fi
           
